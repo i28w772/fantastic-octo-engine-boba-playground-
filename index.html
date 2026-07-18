@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>Boba Playground</title>
+<meta name="description" content="A boba-themed physics sandbox toy — spawn, stack, drag, and pop boba buddies, pearls, and jelly." />
+<meta name="theme-color" content="#3E2C22" />
+
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Boba Playground" />
+
+<style>
+  :root{
+    --cream:#FFF6E9; --milk:#C9A67A; --milk-deep:#A9825C; --taro:#B79FCE; --taro-deep:#8E72AC;
+    --pearl:#4B3621; --matcha:#8FBF8F; --strawberry:#F2A6B3; --mango:#F3B562; --sky:#AFD9E8;
+    --ink:#3E2C22; --paper:#FFFDF8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background: linear-gradient(180deg,#FFF6E9 0%, #FBEBD3 100%); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  #world { display:block; width:100%; height:100%; touch-action:none; }
+
+  #topbar {
+    position:fixed; top:0; left:0; right:0; z-index:10;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 14px; gap:10px;
+    background: linear-gradient(180deg, rgba(255,246,233,0.95), rgba(255,246,233,0.0));
+    pointer-events:none;
+  }
+  #topbar * { pointer-events:auto; }
+  .title { font-weight:800; color:var(--ink); font-size:1.05rem; display:flex; align-items:center; gap:8px; }
+  .title .logo-mark {
+    width: 32px; height: 32px; flex: 0 0 auto;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 8px rgba(62,44,34,0.25);
+  }
+  .title .logo-mark svg { width:100%; height:100%; display:block; }
+  #hint { font-size:0.72rem; color:#8a7060; max-width:220px; text-align:right; line-height:1.3; }
+
+  #toolbar {
+    position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:10;
+    display:flex; align-items:center; gap:6px;
+    background: var(--paper);
+    border: 2px solid rgba(75,54,33,0.12);
+    border-radius: 20px;
+    padding: 8px;
+    box-shadow: 0 10px 30px rgba(75,54,33,0.25);
+    max-width: 94vw;
+    overflow-x:auto;
+  }
+  .tool-btn {
+    flex: 0 0 auto;
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    border: none;
+    background: #F3E4CC;
+    font-size: 1.3rem;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition: transform 0.12s ease, background 0.12s ease;
+    position:relative;
+  }
+  .tool-btn:active { transform: scale(0.9); }
+  .tool-btn.active { background: var(--milk-deep); box-shadow: 0 0 0 3px var(--mango) inset; }
+  .tool-btn .label {
+    position:absolute; bottom: -20px; left:50%; transform:translateX(-50%);
+    font-size:0.55rem; color:#8a7060; white-space:nowrap; font-weight:600;
+    opacity:0; transition:opacity .15s;
+  }
+  .tool-btn:hover .label { opacity:1; }
+  .sep { width:1px; height:30px; background:rgba(75,54,33,0.15); margin:0 2px; flex:0 0 auto; }
+
+  .toast {
+    position:fixed; top:64px; left:50%; transform:translateX(-50%);
+    background: var(--ink); color:#fff; padding:8px 16px; border-radius:999px;
+    font-size:0.78rem; z-index:20; opacity:0; transition:opacity .25s ease; pointer-events:none;
+  }
+  .toast.show { opacity:1; }
+
+  #counter {
+    position:fixed; top:14px; left:50%; transform:translateX(-50%);
+    font-size:0.68rem; color:#8a7060; z-index:10; background:rgba(255,253,248,0.8);
+    padding:3px 10px; border-radius:999px; font-weight:600;
+  }
+
+  @media (max-width:520px){
+    .title span.full { display:none; }
+    #hint { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="world"></canvas>
+
+<div id="topbar">
+  <div class="title">
+    <span class="logo-mark">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Boba Playground logo">
+        <defs>
+          <linearGradient id="bpBg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFF6E9"/>
+            <stop offset="1" stop-color="#FBEBD3"/>
+          </linearGradient>
+        </defs>
+        <rect width="100" height="100" fill="url(#bpBg)"/>
+        <line x1="58" y1="24" x2="70" y2="6" stroke="#E8C15A" stroke-width="7" stroke-linecap="round"/>
+        <rect x="17" y="22" width="66" height="66" rx="20" fill="#C9A67A" stroke="#3E2C22" stroke-width="3.5"/>
+        <ellipse cx="27" cy="61" rx="7" ry="5" fill="#F2A6B3" opacity="0.65"/>
+        <ellipse cx="73" cy="61" rx="7" ry="5" fill="#F2A6B3" opacity="0.65"/>
+        <circle cx="40" cy="49" r="10.5" fill="#FFFDF8"/>
+        <circle cx="60" cy="49" r="10.5" fill="#FFFDF8"/>
+        <circle cx="40" cy="51" r="5" fill="#3E2C22"/>
+        <circle cx="60" cy="51" r="5" fill="#3E2C22"/>
+        <path d="M42 67 Q50 75 58 67" stroke="#3E2C22" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="full">Boba Playground</span>
+  </div>
+  <div id="hint">Tap empty space to place · drag to move<br/>💥 pop · 🗑 delete</div>
+</div>
+
+<div id="counter">0 objects</div>
+<div class="toast" id="toast"></div>
+
+<div id="toolbar">
+  <button class="tool-btn active" data-tool="select" title="Move">
+    <span class="tool-emoji">🖐️</span><span class="label">Move</span>
+  </button>
+  <div class="sep"></div>
+  <button class="tool-btn" data-tool="buddy" title="Boba Buddy">
+    <span class="tool-emoji">🧋</span><span class="label">Buddy</span>
+  </button>
+  <button class="tool-btn" data-tool="pearl" title="Pearl">
+    <span class="tool-emoji">⚫</span><span class="label">Pearl</span>
+  </button>
+  <button class="tool-btn" data-tool="jelly" title="Jelly">
+    <span class="tool-emoji">🟨</span><span class="label">Jelly</span>
+  </button>
+  <button class="tool-btn" data-tool="plank" title="Plank">
+    <span class="tool-emoji">▬</span><span class="label">Plank</span>
+  </button>
+  <button class="tool-btn" data-tool="trampoline" title="Trampoline">
+    <span class="tool-emoji">🔵</span><span class="label">Bouncer</span>
+  </button>
+  <div class="sep"></div>
+  <button class="tool-btn" data-tool="pop" title="Pop">
+    <span class="tool-emoji">💥</span><span class="label">Pop</span>
+  </button>
+  <button class="tool-btn" data-tool="delete" title="Delete">
+    <span class="tool-emoji">🗑️</span><span class="label">Delete</span>
+  </button>
+  <div class="sep"></div>
+  <button class="tool-btn" id="gravityBtn" title="Toggle Gravity">
+    <span class="tool-emoji">🌍</span><span class="label">Gravity</span>
+  </button>
+  <button class="tool-btn" id="shakeBtn" title="Shake">
+    <span class="tool-emoji">🌀</span><span class="label">Shake</span>
+  </button>
+  <button class="tool-btn" id="soundBtn" title="Mute/Unmute">
+    <span class="tool-emoji">🔊</span><span class="label">Sound</span>
+  </button>
+  <button class="tool-btn" id="clearBtn" title="Clear All">
+    <span class="tool-emoji">🧹</span><span class="label">Clear</span>
+  </button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+(function () {
+  const { Engine, World, Bodies, Body, Composite, Mouse, MouseConstraint, Events, Query } = Matter;
+
+  // Floor height, in CSS px, measured up from the bottom of the viewport.
+  // Kept clear of the toolbar (~66px tall + 14px bottom gap = ~80px) so
+  // objects resting on the floor are never hidden behind it.
+  const FLOOR_H = 100;
+
+  // ---------- setup ----------
+  const canvas = document.getElementById('world');
+  const ctx = canvas.getContext('2d');
+  const engine = Engine.create();
+  const world = engine.world;
+  engine.gravity.y = 1;
+
+  const GRAVITY_MODES = [
+    { label: 'Normal', y: 1 },
+    { label: 'Moon', y: 0.32 },
+    { label: 'Zero-G', y: 0 },
+    { label: 'Reverse', y: -1 }
+  ];
+  let gravityIndex = 0;
+
+  const FLAVORS = [
+    { name: 'Milk Tea', color: '#C9A67A', dark: '#A9825C' },
+    { name: 'Taro', color: '#B79FCE', dark: '#8E72AC' },
+    { name: 'Matcha', color: '#8FBF8F', dark: '#6B9B6B' },
+    { name: 'Strawberry', color: '#F2A6B3', dark: '#DC7F90' },
+    { name: 'Mango', color: '#F3B562', dark: '#D89638' },
+    { name: 'Sky', color: '#AFD9E8', dark: '#8BBFD1' }
+  ];
+  const JELLY_COLORS = ['#F3B562', '#F2A6B3', '#8FBF8F', '#AFD9E8', '#E8C15A'];
+
+  let W = 0, H = 0;
+  function resize() {
+    // Deliberately NOT scaling the backing store by devicePixelRatio here:
+    // Matter.js's Mouse module derives its coordinate scale from
+    // canvas.width vs canvas.clientWidth, and mixing that with a manual
+    // devicePixelRatio transform double-counts the scale factor, throwing
+    // off drag alignment on high-DPI screens. Plain CSS-pixel canvas keeps
+    // physics/mouse/render coordinates all in the same space.
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    rebuildWalls();
+  }
+
+  // ---------- walls ----------
+  let wallBodies = [];
+  function rebuildWalls() {
+    wallBodies.forEach(b => Composite.remove(world, b));
+    const w = window.innerWidth, h = window.innerHeight, t = 60;
+    const ground = Bodies.rectangle(w / 2, h - FLOOR_H + t / 2, w + t, t, { isStatic: true, friction: 0.8, plugin: { type: 'wall', color: '#E0C79A' } });
+    const left = Bodies.rectangle(-t / 2 + 6, h / 2, t, h * 3, { isStatic: true, plugin: { type: 'wallSide' } });
+    const right = Bodies.rectangle(w + t / 2 - 6, h / 2, t, h * 3, { isStatic: true, plugin: { type: 'wallSide' } });
+    const ceil = Bodies.rectangle(w / 2, -t / 2 + 6, w + t, t, { isStatic: true, plugin: { type: 'wallSide' } });
+    wallBodies = [ground, left, right, ceil];
+    Composite.add(world, wallBodies);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- mouse ----------
+  const mouse = Mouse.create(canvas);
+  const mouseConstraint = MouseConstraint.create(engine, {
+    mouse,
+    constraint: { stiffness: 0.15, damping: 0.15, render: { visible: false } }
+  });
+  Composite.add(world, mouseConstraint);
+
+  // ---------- audio (tiny synthesized blips, no files) ----------
+  let audioCtx = null;
+  let soundOn = true;
+  function ensureAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }
+  function playTone(freq, dur, type, vol) {
+    if (!soundOn) return;
+    ensureAudio();
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = vol || 0.08;
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+  }
+  function sfxSpawn() { playTone(500 + Math.random() * 200, 0.08, 'sine', 0.05); }
+  function sfxPop() { playTone(180, 0.18, 'square', 0.09); setTimeout(() => playTone(720, 0.12, 'sine', 0.06), 40); }
+  function sfxDelete() { playTone(220, 0.1, 'sawtooth', 0.05); }
+  function sfxBoing() { playTone(140, 0.25, 'sine', 0.08); }
+
+  // ---------- spawning ----------
+  const MAX_BODIES = 140;
+  let spawnOrder = [];
+
+  function registerSpawn(body) {
+    Composite.add(world, body);
+    spawnOrder.push(body);
+    sfxSpawn();
+    enforceCap();
+    updateCounter();
+  }
+  function enforceCap() {
+    while (spawnOrder.length > MAX_BODIES) {
+      const oldest = spawnOrder.shift();
+      Composite.remove(world, oldest);
+    }
+  }
+
+  function pickFlavor() { return FLAVORS[Math.floor(Math.random() * FLAVORS.length)]; }
+
+  function spawnBuddy(x, y) {
+    const w = 46 + Math.random() * 18;
+    const h = 58 + Math.random() * 20;
+    const flavor = pickFlavor();
+    const body = Bodies.rectangle(x, y, w, h, {
+      chamfer: { radius: w * 0.32 },
+      restitution: 0.35,
+      friction: 0.4,
+      density: 0.0018,
+      plugin: {
+        type: 'buddy', poppable: true, color: flavor.color, dark: flavor.dark,
+        w, h, eyeSeed: Math.random() * 10
+      }
+    });
+    registerSpawn(body);
+  }
+
+  function spawnPearl(x, y) {
+    const r = 7 + Math.random() * 3;
+    const body = Bodies.circle(x, y, r, {
+      restitution: 0.75, friction: 0.05, density: 0.003,
+      plugin: { type: 'pearl', poppable: false, color: '#4B3621', r }
+    });
+    registerSpawn(body);
+  }
+
+  function spawnJelly(x, y) {
+    const s = 20 + Math.random() * 10;
+    const color = JELLY_COLORS[Math.floor(Math.random() * JELLY_COLORS.length)];
+    const body = Bodies.rectangle(x, y, s, s, {
+      chamfer: { radius: 6 }, restitution: 0.5, friction: 0.3, density: 0.0012,
+      plugin: { type: 'jelly', poppable: true, color, w: s, h: s }
+    });
+    registerSpawn(body);
+  }
+
+  function spawnPlank(x, y) {
+    const body = Bodies.rectangle(x, y, 150, 16, {
+      friction: 0.6, density: 0.004, restitution: 0.1,
+      plugin: { type: 'plank', poppable: false, color: '#C9A67A', w: 150, h: 16 }
+    });
+    registerSpawn(body);
+  }
+
+  function spawnTrampoline(x, y) {
+    const body = Bodies.rectangle(x, y, 120, 16, {
+      isStatic: true, restitution: 1.35, friction: 0.2,
+      plugin: { type: 'trampoline', poppable: false, color: '#AFD9E8', w: 120, h: 16 }
+    });
+    Composite.add(world, body);
+    spawnOrder.push(body);
+    sfxSpawn();
+    updateCounter();
+  }
+
+  function popBody(body) {
+    const { x, y } = body.position;
+    const color = (body.plugin && body.plugin.color) || '#C9A67A';
+    removeBody(body);
+    const n = 8 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.4;
+      const speed = 3 + Math.random() * 4;
+      const p = Bodies.circle(x + Math.cos(ang) * 4, y + Math.sin(ang) * 4, 5 + Math.random() * 2, {
+        restitution: 0.7, friction: 0.05, density: 0.003,
+        plugin: { type: 'pearl', poppable: false, color: '#4B3621' }
+      });
+      Body.setVelocity(p, { x: Math.cos(ang) * speed, y: Math.sin(ang) * speed - 2 });
+      Composite.add(world, p);
+      spawnOrder.push(p);
+    }
+    spawnBurst(x, y, color);
+    sfxPop();
+    enforceCap();
+    updateCounter();
+  }
+
+  function removeBody(body) {
+    if (mouseConstraint.body === body) mouseConstraint.body = null;
+    Composite.remove(world, body);
+    spawnOrder = spawnOrder.filter(b => b !== body);
+    updateCounter();
+  }
+
+  // decorative fading burst particles (visual only, not physical)
+  let particles = [];
+  function spawnBurst(x, y, color) {
+    for (let i = 0; i < 14; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 3;
+      particles.push({
+        x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 1,
+        life: 1, color, r: 2 + Math.random() * 3
+      });
+    }
+  }
+  function updateParticles() {
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.035;
+    });
+    particles = particles.filter(p => p.life > 0);
+  }
+  function drawParticles() {
+    particles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- tool state ----------
+  let currentTool = 'select';
+  const toolButtons = document.querySelectorAll('.tool-btn[data-tool]');
+  toolButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentTool = btn.dataset.tool;
+      toolButtons.forEach(b => b.classList.toggle('active', b === btn));
+      showToast(toolLabel(currentTool));
+    });
+  });
+  function toolLabel(t) {
+    return {
+      select: 'Move mode — drag anything', buddy: 'Tap to place a Boba Buddy', pearl: 'Tap to place a pearl',
+      jelly: 'Tap to place jelly', plank: 'Tap to place a plank', trampoline: 'Tap to place a bouncer',
+      pop: 'Tap a buddy or jelly to pop it', delete: 'Tap anything to delete it'
+    }[t] || '';
+  }
+
+  let toastTimer = null;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1400);
+  }
+
+  function updateCounter() {
+    const n = Composite.allBodies(world).filter(b => b.plugin && ['buddy', 'pearl', 'jelly', 'plank', 'trampoline'].includes(b.plugin.type)).length;
+    document.getElementById('counter').textContent = n + (n === 1 ? ' object' : ' objects');
+  }
+
+  // ---------- click-to-spawn vs drag detection ----------
+  let downPos = null, downTime = 0;
+  canvas.addEventListener('pointerdown', e => {
+    downPos = { x: e.clientX, y: e.clientY };
+    downTime = Date.now();
+  });
+  canvas.addEventListener('pointerup', e => {
+    if (!downPos) return;
+    const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+    const dt = Date.now() - downTime;
+    if (dist < 8 && dt < 500) {
+      handleClick(e.clientX, e.clientY);
+    }
+    downPos = null;
+  });
+
+  function handleClick(x, y) {
+    const point = { x, y };
+    const hitBodies = Query.point(
+      Composite.allBodies(world).filter(b => b.plugin && b.plugin.type),
+      point
+    );
+
+    if (currentTool === 'pop') {
+      const target = hitBodies.find(b => b.plugin.poppable);
+      if (target) popBody(target);
+      return;
+    }
+    if (currentTool === 'delete') {
+      const target = hitBodies.find(b => b.plugin.type !== 'wall' && b.plugin.type !== 'wallSide');
+      if (target) { removeBody(target); sfxDelete(); }
+      return;
+    }
+    if (currentTool === 'select') return;
+
+    if (hitBodies.length > 0) return; // don't stack-spawn directly on top of something
+    switch (currentTool) {
+      case 'buddy': spawnBuddy(x, y); break;
+      case 'pearl': spawnPearl(x, y); break;
+      case 'jelly': spawnJelly(x, y); break;
+      case 'plank': spawnPlank(x, y); break;
+      case 'trampoline': spawnTrampoline(x, y); break;
+    }
+  }
+
+  // ---------- action buttons ----------
+  document.getElementById('gravityBtn').addEventListener('click', () => {
+    gravityIndex = (gravityIndex + 1) % GRAVITY_MODES.length;
+    engine.gravity.y = GRAVITY_MODES[gravityIndex].y;
+    showToast('Gravity: ' + GRAVITY_MODES[gravityIndex].label);
+  });
+
+  document.getElementById('shakeBtn').addEventListener('click', () => {
+    Composite.allBodies(world).forEach(b => {
+      if (b.isStatic) return;
+      Body.applyForce(b, b.position, { x: (Math.random() - 0.5) * 0.04, y: -Math.random() * 0.05 });
+    });
+    showToast('Shake!');
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    spawnOrder.forEach(b => Composite.remove(world, b));
+    spawnOrder = [];
+    particles = [];
+    updateCounter();
+    showToast('Cleared');
+  });
+
+  document.getElementById('soundBtn').addEventListener('click', function () {
+    soundOn = !soundOn;
+    this.querySelector('.tool-emoji').textContent = soundOn ? '🔊' : '🔇';
+    if (soundOn) { ensureAudio(); playTone(600, 0.06, 'sine', 0.05); }
+  });
+
+  // trampoline boing sound on strong impact
+  Events.on(engine, 'collisionStart', (evt) => {
+    evt.pairs.forEach(pair => {
+      const a = pair.bodyA, b = pair.bodyB;
+      const tramp = (a.plugin && a.plugin.type === 'trampoline') ? a : (b.plugin && b.plugin.type === 'trampoline') ? b : null;
+      if (tramp) sfxBoing();
+    });
+  });
+
+  // ---------- rendering ----------
+  function drawPolygon(body, fill, strokeColor) {
+    const verts = body.vertices;
+    ctx.beginPath();
+    ctx.moveTo(verts[0].x, verts[0].y);
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (strokeColor) { ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+
+  function rotated(cx, cy, angle, lx, ly) {
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return { x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos };
+  }
+
+  function drawBuddy(body) {
+    const p = body.plugin;
+    drawPolygon(body, p.color, 'rgba(62,44,34,0.25)');
+
+    const { x: cx, y: cy } = body.position;
+    const ang = body.angle;
+    const w = p.w, h = p.h;
+
+    // straw
+    const strawBase = rotated(cx, cy, ang, w * 0.12, -h * 0.5);
+    const strawTip = rotated(cx, cy, ang, w * 0.32, -h * 0.82);
+    ctx.strokeStyle = '#E8C15A';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(strawBase.x, strawBase.y);
+    ctx.lineTo(strawTip.x, strawTip.y);
+    ctx.stroke();
+
+    // eyes (slight liveliness based on velocity)
+    const vx = body.velocity.x, vy = body.velocity.y;
+    const jitter = Math.max(-3, Math.min(3, vx * 0.6));
+    const eyeL = rotated(cx, cy, ang, -w * 0.17, -h * 0.02);
+    const eyeR = rotated(cx, cy, ang, w * 0.17, -h * 0.02);
+    [eyeL, eyeR].forEach(e => {
+      ctx.fillStyle = '#FFFDF8';
+      ctx.beginPath(); ctx.arc(e.x, e.y, w * 0.13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3E2C22';
+      ctx.beginPath(); ctx.arc(e.x + jitter * 0.3, e.y + 1, w * 0.065, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // mouth (simple curve; opens wider with speed for personality)
+    const speed = Math.min(8, Math.hypot(vx, vy));
+    const mouth = rotated(cx, cy, ang, 0, h * 0.17);
+    ctx.strokeStyle = '#3E2C22';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(mouth.x, mouth.y, w * 0.13, 0.15 * Math.PI, 0.85 * Math.PI + speed * 0.02);
+    ctx.stroke();
+
+    // blush
+    ctx.fillStyle = 'rgba(242,166,179,0.55)';
+    const blushL = rotated(cx, cy, ang, -w * 0.32, h * 0.12);
+    const blushR = rotated(cx, cy, ang, w * 0.32, h * 0.12);
+    [blushL, blushR].forEach(bl => { ctx.beginPath(); ctx.ellipse(bl.x, bl.y, w * 0.09, w * 0.06, ang, 0, Math.PI * 2); ctx.fill(); });
+  }
+
+  function drawPearl(body) {
+    const p = body.plugin;
+    ctx.beginPath();
+    ctx.arc(body.position.x, body.position.y, p.r || 8, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(body.position.x - (p.r || 8) * 0.3, body.position.y - (p.r || 8) * 0.3, (p.r || 8) * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawJelly(body) {
+    const p = body.plugin;
+    drawPolygon(body, p.color, 'rgba(62,44,34,0.2)');
+    const { x, y } = body.position;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(x - p.w * 0.15, y - p.h * 0.15, p.w * 0.14, p.h * 0.08, body.angle, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawPlank(body) {
+    const p = body.plugin;
+    drawPolygon(body, p.color, 'rgba(62,44,34,0.3)');
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1.5;
+    const verts = body.vertices;
+    ctx.beginPath();
+    ctx.moveTo((verts[0].x + verts[1].x) / 2, (verts[0].y + verts[1].y) / 2);
+    ctx.lineTo((verts[2].x + verts[3].x) / 2, (verts[2].y + verts[3].y) / 2);
+    ctx.stroke();
+  }
+
+  function drawTrampoline(body) {
+    const p = body.plugin;
+    drawPolygon(body, p.color, 'rgba(62,44,34,0.3)');
+    const { x, y } = body.position;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = -4; i <= 4; i++) {
+      const px = x + i * (p.w / 9), py = y + (i % 2 === 0 ? -4 : 4);
+      if (i === -4) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  function drawGround() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const top = h - FLOOR_H;
+    const grd = ctx.createLinearGradient(0, top, 0, h);
+    grd.addColorStop(0, '#E9CE9F');
+    grd.addColorStop(1, '#D9B77E');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, top, w, FLOOR_H);
+
+    // top edge highlight, like the lip of a counter
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillRect(0, top, w, 3);
+
+    // tile seams: short vertical grout lines near the top, evenly spaced
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 2;
+    const tileW = 56;
+    for (let i = 0; i < w; i += tileW) {
+      ctx.beginPath();
+      ctx.moveTo(i, top + 6);
+      ctx.lineTo(i, top + Math.min(FLOOR_H - 6, 22));
+      ctx.stroke();
+    }
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    drawGround();
+
+    const bodies = Composite.allBodies(world);
+    for (const body of bodies) {
+      if (!body.plugin || !body.plugin.type) continue;
+      switch (body.plugin.type) {
+        case 'buddy': drawBuddy(body); break;
+        case 'pearl': drawPearl(body); break;
+        case 'jelly': drawJelly(body); break;
+        case 'plank': drawPlank(body); break;
+        case 'trampoline': drawTrampoline(body); break;
+      }
+    }
+    drawParticles();
+  }
+
+  // ---------- main loop ----------
+  let lastTime = performance.now();
+  function loop(now) {
+    const delta = Math.min(33, now - lastTime);
+    lastTime = now;
+    Engine.update(engine, delta);
+    updateParticles();
+    render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // seed a few starter buddies so the scene isn't empty
+  setTimeout(() => {
+    spawnBuddy(window.innerWidth * 0.35, 120);
+    spawnBuddy(window.innerWidth * 0.55, 60);
+    spawnPearl(window.innerWidth * 0.5, 20);
+    showToast('Welcome to Boba Playground! 🧋');
+  }, 200);
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(err => console.warn('SW registration failed', err));
+  });
+}
+</script>
+</body>
+</html>
